@@ -1,0 +1,314 @@
+#include <string.h>
+
+#include "gpu.h"
+#include "util.h"
+#include "gl.h"
+
+gpuStatus_t gpuStatus = { .raw = 0x1C000000 };
+gpuState_t state;
+
+union {
+	u8 b[512][2048];
+	u16 h[512][1024];
+	u32 w[512][512];
+} vram;
+
+extern u32 currentpc;
+//extern int logInstrs;
+
+u32 cmdBuf[16];
+u32 cmdBufLen = 0;
+u32 cmdLen = 0;
+u32 bufCmd = 0;
+
+u32 trX = 0;
+u32 trY = 0;
+u32 trW = 0;
+u32 trH = 0;
+u32 trLen = 0;
+u32* trData = NULL;
+u32* trPtr = NULL;
+
+int vramN = 0;
+
+void saveVram( void ) {
+	char fn[256] = {0};
+	sprintf( fn, "vram%d.ppm", vramN++ );
+	FILE* f = fopen( fn, "wb" );
+	fprintf( f, "P6\n%d %d\n%d\n", 2048, 512, 255 );
+	for( int y = 0; y < 512; y++ ) {
+		for( int x = 0; x < 2048; x++ ) {
+			fwrite( &vram.b[y][x], 1, 1, f );
+			fwrite( &vram.b[y][x], 1, 1, f );
+			fwrite( &vram.b[y][x], 1, 1, f );
+		}
+	}
+	fclose( f );
+}
+
+#define LONG_CMD( words, lcmd ) \
+	case lcmd: \
+		cmdLen = words; \
+		bufCmd = lcmd; \
+		cmdBuf[0] = cmd; \
+		cmdBufLen = 1; \
+		break;
+
+void gp0( u32 cmd ) {
+	//INFO( "GP0: 0x%.8X", cmd );
+	
+	if( cmdLen > 0 ) {
+		cmdBuf[cmdBufLen++] = cmd;
+		if( cmdBufLen == cmdLen ) {
+			u32 op = cmdBuf[0] >> 24;
+			switch( op ) {
+				case FLAT_QUAD:
+					{
+						u32 r = cmdBuf[0] & 0xFF;
+						u32 g = ( cmdBuf[0] >> 8 ) & 0xFF;
+						u32 b = ( cmdBuf[0] >> 16 ) & 0xFF;
+						vertex verts[4];
+						for( int i = 0; i < 4; i++ ) {
+							int x = state.drawX + (s16)( cmdBuf[i+1] & 0xFFFF );
+							int y = state.drawY + (s16)( cmdBuf[i+1] >> 16 );
+							verts[i].x = (float)x / 512.0f - 1.0f;
+							verts[i].y = 1.0f - (float)y / 256.0f;
+							verts[i].r = r;
+							verts[i].g = g;
+							verts[i].b = b;
+							verts[i].a = 255;
+						}
+						drawQuad( verts );
+					}
+					break;
+					
+				case FLAT_TEXTURED_QUAD:;
+					{
+						u32 r = cmdBuf[0] & 0xFF;
+						u32 g = ( cmdBuf[0] >> 8 ) & 0xFF;
+						u32 b = ( cmdBuf[0] >> 16 ) & 0xFF;
+						u32 palette = cmdBuf[2] >> 16;
+						u32 texPage = cmdBuf[4] >> 16;
+						int tx = ( texPage & 0x0F ) * 64;
+						int ty = texPage & 0x10 ? 256 : 0;
+						//texturedVertex verts[4];
+						vertex verts[4];
+						for( int i = 0; i < 4; i++ ) {
+							int x = state.drawX + (s16)( cmdBuf[i*2+1] & 0xFFFF );
+							int y = state.drawY + (s16)( cmdBuf[i*2+1] >> 16 );
+							int u = tx + ( cmdBuf[i*2+2] & 0xFF );
+							int v = ty + ( ( cmdBuf[i*2+2] >> 8 ) & 0xFF );
+							verts[i].x = (float)x / 512.0f - 1.0f;
+							verts[i].y = 1.0f - (float)y / 256.0f;
+							//verts[i].u = (float)u / 1024.0f;
+							//verts[i].v = (float)v / 512.0f;
+							verts[i].r = r;
+							verts[i].g = g;
+							verts[i].b = b;
+							verts[i].a = 255;
+						}
+						//drawTexQuad( verts );
+						drawQuad( verts );
+					}
+					break;
+					
+				case SHADED_TRI:
+					{
+						vertex verts[3];
+						for( int i = 0; i < 3; i++ ) {
+							int x = state.drawX + (s16)( cmdBuf[i*2+1] & 0xFFFF );
+							int y = state.drawY + (s16)( cmdBuf[i*2+1] >> 16 );
+							verts[i].x = (float)x / 512.0f - 1.0f;
+							verts[i].y = 1.0f - (float)y / 256.0f;
+							if( i == 0 ) {
+								verts[i].r = cmdBuf[0] & 0xFF;
+								verts[i].g = ( cmdBuf[0] >> 8 ) & 0xFF;
+								verts[i].b = ( cmdBuf[0] >> 16 ) & 0xFF;
+							} else {
+								verts[i].r = cmdBuf[i*2] & 0xFF;
+								verts[i].g = ( cmdBuf[i*2] >> 8 ) & 0xFF;
+								verts[i].b = ( cmdBuf[i*2] >> 16 ) & 0xFF;
+							}
+							verts[i].a = 255;
+						}
+						drawVerts( verts, 3 );
+					}
+					break;
+					
+				case SHADED_QUAD:
+					{
+						vertex verts[4];
+						for( int i = 0; i < 4; i++ ) {
+							int x = state.drawX + (s16)( cmdBuf[i*2+1] & 0xFFFF );
+							int y = state.drawY + (s16)( cmdBuf[i*2+1] >> 16 );
+							verts[i].x = (float)x / 512.0f - 1.0f;
+							verts[i].y = 1.0f - (float)y / 256.0f;
+							if( i == 0 ) {
+								verts[i].r = cmdBuf[0] & 0xFF;
+								verts[i].g = ( cmdBuf[0] >> 8 ) & 0xFF;
+								verts[i].b = ( cmdBuf[0] >> 16 ) & 0xFF;
+							} else {
+								verts[i].r = cmdBuf[i*2] & 0xFF;
+								verts[i].g = ( cmdBuf[i*2] >> 8 ) & 0xFF;
+								verts[i].b = ( cmdBuf[i*2] >> 16 ) & 0xFF;
+							}
+							verts[i].a = 255;
+						}
+						drawQuad( verts );
+					}
+					break;
+					
+				case TRANSFER_TO_VRAM:;
+					trX = cmdBuf[1] & 0xFFFF;
+					trY = cmdBuf[1] >> 16;
+					trW = cmdBuf[2] & 0xFFFF;
+					trH = cmdBuf[2] >> 16;
+					trLen = ( ( trW * trH + 1 ) & ~1 ) / 2;
+					trData = realloc( trData, trLen * sizeof( u32 ) );
+					trPtr = trData;
+					//INFO( "cpu to vram transfer x: %d y: %d w: %d h: %d len: %d", trX, trY, trW, trH, trLen );
+					break;
+					
+				case TRANSFER_FROM_VRAM:;
+					int x = cmdBuf[1] & 0xFFFF;
+					int y = cmdBuf[1] >> 16;
+					int w = cmdBuf[2] & 0xFFFF;
+					int h = cmdBuf[2] >> 16;
+					int len = ( ( trW * trH + 1 ) & ~1 ) / 2;
+					INFO( "vram to cpu transfer x: %d y: %d w: %d h: %d len: %d", x, y, w, h, len );
+					break;
+			}
+			
+			cmdLen = 0;
+		}
+		return;
+	}
+	
+	if( trLen > 0 ) {
+		*trPtr++ = cmd;
+		trLen--;
+		if( trLen == 0 ) {
+			vramUpload( trData, trX, trY, trW * 2, trH );
+		}
+		return;
+	}
+	
+	u32 op = cmd >> 24;
+	switch( op ) {
+		case NOP:
+			break;
+			
+		case CLEAR_TEXCACHE:
+			break;
+			
+		LONG_CMD( 5, FLAT_QUAD );
+		LONG_CMD( 9, FLAT_TEXTURED_QUAD );
+		LONG_CMD( 6, SHADED_TRI );
+		LONG_CMD( 8, SHADED_QUAD );
+		LONG_CMD( 3, TRANSFER_TO_VRAM );
+		LONG_CMD( 3, TRANSFER_FROM_VRAM );
+		
+		case DRAW_MODE:
+			gpuStatus.raw = ( gpuStatus.raw & 0xFFFFFC00 ) | ( cmd & 0x03FF );
+			gpuStatus.texDisable = GET_BIT( cmd, 11 );
+			state.texFlipX = GET_BIT( cmd, 12 );
+			state.texFlipY = GET_BIT( cmd, 13 );
+			break;
+			
+		case SET_TEX_WIN:
+			state.texWinXMask = cmd & 0x1F;
+			state.texWinYMask = ( cmd >> 5 ) & 0x1F;
+			state.texWinX = ( cmd >> 10 ) & 0x1F;
+			state.texWinY = ( cmd >> 15 ) & 0x1F;
+			break;
+			
+		case SET_CLIP1:
+			state.clipX1 = cmd & 0x03FF;
+			state.clipY1 = ( cmd >> 10 ) & 0x03FF;
+			break;
+			
+		case SET_CLIP2:
+			state.clipX2 = cmd & 0x03FF;
+			state.clipY2 = ( cmd >> 10 ) & 0x03FF;
+			break;
+			
+		case SET_DRAW:;
+			u16 x = cmd & 0x07FF;
+			u16 y = ( cmd >> 11 ) & 0x07FF;
+			state.drawX = (s16)( x << 5 ) >> 5;
+			state.drawY = (s16)( y << 5 ) >> 5;
+			break;
+			
+		case SET_MASK:
+			gpuStatus.forceWriteMask = GET_BIT( cmd, 0 );
+			gpuStatus.checkMask = GET_BIT( cmd, 1 );
+			break;
+			
+		default:
+			ERR( "Unknown gp0 command 0x%.8X\n", cmd );
+			break;
+	}
+}
+
+void gp1( u32 cmd ) {
+	u32 op = cmd >> 24;
+	//INFO( "GP1: 0x%.2X, pc: 0x%.8X", op, currentpc );
+	
+	switch( op ) {
+		case RESET:
+			memset( &gpuStatus, 0, sizeof( gpuStatus_t ) );
+			memset( &state, 0, sizeof( gpuState_t ) );
+			
+			// always ready for dma transfer
+			gpuStatus.raw = 0x1C000000;
+			
+			gpuStatus.displayDisable = TRUE;
+			gpuStatus.interlace = TRUE;
+			state.pixelStart = 0x0200;
+			state.pixelEnd = 0x0C00;
+			state.lineStart = 0x10;
+			state.lineEnd = 0x0100;
+			break;
+			
+		case RESET_CMD_BUFFER:
+			break;
+			
+		case IRQ_ACK:
+			break;
+		
+		case DISPLAY_ENABLE:
+			break;
+			
+		case DMA_DIR:
+			gpuStatus.DMADir = cmd & 0x03;
+			break;
+			
+		case SET_DISPLAY:
+			state.displayX = cmd & 0x03FE;
+			state.displayY = ( cmd >> 10 ) & 0x01FF;
+			break;
+			
+		case DISPLAY_MODE:
+			gpuStatus.hres = cmd & 0x03;
+			gpuStatus.vres = GET_BIT( cmd, 2 );
+			gpuStatus.pal = GET_BIT( cmd, 3 );
+			gpuStatus.outDepth = GET_BIT( cmd, 4 );
+			gpuStatus.interlace = GET_BIT( cmd, 5 );
+			gpuStatus.hres2 = GET_BIT( cmd, 6 );
+			break;
+			
+		case HRANGE:
+			state.pixelStart = cmd & 0x0FFF;
+			state.pixelEnd = ( cmd >> 12 ) & 0x0FFF;
+			break;
+			
+		case VRANGE:
+			state.lineStart = cmd & 0x03FF;
+			state.lineEnd = ( cmd >> 10 ) & 0x03FF;
+			break;
+			
+		default:
+			ERR( "Unknown gp1 command 0x%.8X\n", cmd );
+			break;
+	}
+}
