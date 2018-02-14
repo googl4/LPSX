@@ -32,7 +32,7 @@ int logBranches = FALSE;
 void except( u32 cause ) {
 	//INFO( "exception: 0x%X", cause );
 	
-	c0regs.sr.raw |= ( c0regs.sr.raw << 2 ) & 0x3F;
+	c0regs.sr.raw = ( c0regs.sr.raw & ~0x3F ) | ( ( c0regs.sr.raw << 2 ) & 0x3F );
 	c0regs.cause = cause << 2;
 	c0regs.epc = currentpc;
 	if( c0regs.sr.bev ) {
@@ -59,7 +59,7 @@ void execute( u32 opcode ) {
 	regs[0] = 0;
 	
 	if( currentpc == 0xA0 ) {
-		//INFO( "bios call: 0xA0%.2X", inregs[9] );
+		INFO( "bios call: 0xA0%.2X", inregs[9] );
 	}
 	if( currentpc == 0xB0 ) {
 		if( inregs[9] == 0x3D ) {
@@ -71,11 +71,11 @@ void execute( u32 opcode ) {
 				strcat( dmsg, tmp );
 			}
 		} else {
-			//INFO( "bios call: 0xB0%.2X", inregs[9] );
+			INFO( "bios call: 0xB0%.2X", inregs[9] );
 		}
 	}
 	if( currentpc == 0xC0 ) {
-		//INFO( "bios call: 0xC0%.2X", inregs[9] );
+		INFO( "bios call: 0xC0%.2X", inregs[9] );
 	}
 	
 	u32 op = GET_OP( opcode );
@@ -191,6 +191,7 @@ void execute( u32 opcode ) {
 					break;
 					
 				case SYSCALL:
+					//pc -= 4;
 					except( 0x08 );
 					//INFO( "syscall %d, r4: 0x%.8X", GET_SYS( opcode ), regs[4] );
 					//GET_SYS( opcode );
@@ -581,6 +582,7 @@ void step( int clocks ) {
 			nextOpcode = load( pc, INSTRUCTION );
 			nextpc = pc;
 		}
+		
 		//printf( "fetch: 0x%.8X from 0x%.8X\n", nextOpcode, pc );
 		pc += 4;
 		

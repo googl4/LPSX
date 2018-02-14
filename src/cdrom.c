@@ -2,6 +2,8 @@
 #include "mips.h"
 #include "util.h"
 
+extern int halt;
+
 cdStatus_t status;
 u8 cdie = 0;
 cdIntrFlags_t cdif = { 0 };
@@ -63,10 +65,11 @@ void cdCommand( u8 cmd ) {
 }
 
 void cdWrite( u32 addr, u8 n ) {
-	//INFO( "cd write, register: %d, index: %d", addr & 0x0F, status.index );
+	halt = TRUE;
+	//INFO( "cd write, register: %d, index: %d, value: 0x%X", addr & 0x0F, status.index, n );
 	switch( addr & 0x0F ) {
 		case 0:
-			*(u8*)&status = n;
+			status.index = n;
 			break;
 			
 		case 1:
@@ -112,7 +115,12 @@ void cdWrite( u32 addr, u8 n ) {
 	}
 }
 
+// 0x80058484
+// 0x800584E8
+// 0x800585C0
+
 u8 cdRead( u32 addr ) {
+	halt = TRUE;
 	//INFO( "cd read, register: %d, index: %d", addr & 0x0F, status.index );
 	switch( addr & 0x0F ) {
 		case 0:
