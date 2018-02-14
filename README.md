@@ -12,3 +12,5 @@ currently only works with msys2
 
 ## todo
 - fix bios cd irq ack loop
+- stack/memory viewer
+- breakpoints
