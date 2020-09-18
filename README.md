@@ -7,7 +7,7 @@ WIP ps1 emulator
 currently only tested with msys2
 1. build glfw as static library
 2. run build.sh
-3. put SCPH1001.BIN in bios/
+3. put SCPH1000.BIN in bios/
 
 
 ## tasks
