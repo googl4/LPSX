@@ -27,6 +27,19 @@ extern u32 load( u32 addr, int type );
 void setupUI( void ) {
 	ctx = nk_glfw3_init( window, NK_GLFW3_INSTALL_CALLBACKS );
 	
+	//ctx->style.window.background = nk_rgba_f( 0.2, 0.2, 0.2, 0.5 );
+	ctx->style.window.fixed_background.type = NK_STYLE_ITEM_COLOR;
+	ctx->style.window.fixed_background.data.color = nk_rgba_f( 0.2, 0.2, 0.2, 0.6 );
+	
+	ctx->style.window.header.normal.type = NK_STYLE_ITEM_COLOR;
+	ctx->style.window.header.normal.data.color = nk_rgba_f( 0.2, 0.2, 0.2, 0.7 );
+	
+	ctx->style.window.header.hover.type = NK_STYLE_ITEM_COLOR;
+	ctx->style.window.header.hover.data.color = nk_rgba_f( 0.2, 0.2, 0.2, 0.7 );
+	
+	ctx->style.window.header.active.type = NK_STYLE_ITEM_COLOR;
+	ctx->style.window.header.active.data.color = nk_rgba_f( 0.2, 0.2, 0.2, 0.7 );
+	
 	struct nk_font_atlas *atlas;
     nk_glfw3_font_stash_begin( &atlas );
     nk_glfw3_font_stash_end();
@@ -35,14 +48,9 @@ void setupUI( void ) {
 extern u32 regs[32];
 extern int halt;
 extern u32 pc;
-
-extern cdIntrFlags_t cdif;
-extern u8 cdie;
-extern cdStatus_t status;
-extern int parameterHead;
-extern int parameterTail;
-extern int responseHead;
-extern int responseTail;
+extern u32 currentpc;
+extern u32 loadreg;
+extern u32 loadval;
 
 void updateUI( void ) {
 	nk_glfw3_new_frame();
@@ -51,7 +59,11 @@ void updateUI( void ) {
 		char str[256];
 		char* p = str;
 		for( int i = 0; i < 32; i++ ) {
-			sprintf( p, "r%-2d: 0x%.8X    ", i, regs[i] );
+			if( loadreg != 0 && loadreg == i ) {
+				sprintf( p, "r%-2d: 0x%.8X    ", i, loadval );
+			} else {
+				sprintf( p, "r%-2d: 0x%.8X    ", i, regs[i] );
+			}
 			
 			if( ( i + 1 ) % 4 == 0 ) {
 				nk_layout_row_dynamic( ctx, 12, 1 );
@@ -101,34 +113,6 @@ void updateUI( void ) {
 			printInstr( buf + 2, 255, pc + i * 4, load( pc + i * 4, 2 ) );
 			nk_text( ctx, buf, strlen( buf ), NK_TEXT_LEFT );
 		}
-	}
-	
-	nk_end( ctx );
-	
-	if( nk_begin( ctx, "cd status", nk_rect( 5, 345, 479, 160 ), NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_TITLE | NK_WINDOW_NO_SCROLLBAR ) ) {
-		nk_layout_row_dynamic( ctx, 12, 1 );
-		char buf[32];
-		
-		snprintf( buf, 32, "interrupt flags: 0x%.2X", *(u8*)&cdif );
-		nk_text( ctx, buf, strlen( buf ), NK_TEXT_LEFT );
-		
-		snprintf( buf, 32, "interrupt enable: 0x%.2X", cdie );
-		nk_text( ctx, buf, strlen( buf ), NK_TEXT_LEFT );
-		
-		snprintf( buf, 32, "status: 0x%.2X", *(u8*)&status );
-		nk_text( ctx, buf, strlen( buf ), NK_TEXT_LEFT );
-		
-		snprintf( buf, 32, "index: %d", status.index );
-		nk_text( ctx, buf, strlen( buf ), NK_TEXT_LEFT );
-		
-		snprintf( buf, 32, "busy: %d", status.busy );
-		nk_text( ctx, buf, strlen( buf ), NK_TEXT_LEFT );
-		
-		snprintf( buf, 32, "parameter head/tail: %d / %d", parameterHead, parameterTail );
-		nk_text( ctx, buf, strlen( buf ), NK_TEXT_LEFT );
-		
-		snprintf( buf, 32, "response head/tail: %d / %d", responseHead, responseTail );
-		nk_text( ctx, buf, strlen( buf ), NK_TEXT_LEFT );
 	}
 	
 	nk_end( ctx );

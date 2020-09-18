@@ -10,8 +10,8 @@ void loadEXE( char* filename ) {
 	printf( "exe id: %.*s\n", 8, exe->id );
 	printf( "scei string: %s\n", exe->SCEI );
 	printf( "pc: 0x%.8X\n", exe->pc );
-	printf( "load address:0x%.8X\n", exe->dst );
-	printf( "load size:0x%.8X\n", exe->size );
+	printf( "load address: 0x%.8X\n", exe->dst );
+	printf( "load size: 0x%.8X\n", exe->size );
 	
 	pc = exe->pc;
 	regs[28] = exe->gp;

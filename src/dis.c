@@ -68,7 +68,8 @@ void printInstr( char* buf, size_t bufLen, u32 addr, u32 opcode ) {
 				break;
 				
 			default:
-				ERR( "Unknown opcode %.2X", op );
+				snprintf( buf, bufLen, "0x%.8X:0x%.8X:    Invalid", addr, opcode );
+				//ERR( "Unknown opcode 0x%.8X", opcode );
 				break;
 		}
 		
@@ -140,13 +141,15 @@ void printInstr( char* buf, size_t bufLen, u32 addr, u32 opcode ) {
 						break;
 						
 					default:
-						ERR( "Unknown opcode %.2X", op );
+						snprintf( buf, bufLen, "0x%.8X:0x%.8X:    Invalid", addr, opcode );
+						//ERR( "Unknown opcode 0x%.8X", opcode );
 						break;
 				}
 				break;
 				
 			default:
-				ERR( "Unknown opcode %.2X", op );
+				snprintf( buf, bufLen, "0x%.8X:0x%.8X:    Invalid", addr, opcode );
+				//ERR( "Unknown opcode 0x%.8X", opcode );
 				break;
 		}
 	}

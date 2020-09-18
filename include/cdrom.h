@@ -27,6 +27,9 @@ typedef enum {
 	DATE = 0x20,
 } cdTestCommands_t;
 
+void setupCd( void );
+void cdUpdate( void );
+
 void cdWrite( u32 addr, u8 n );
 u8 cdRead( u32 addr );
 

@@ -4,6 +4,7 @@
 #include "dma.h"
 #include "gpu.h"
 #include "cdrom.h"
+#include "joypad.h"
 
 u32 addr_mask = 0x1FFFFFFF;
 
@@ -127,7 +128,7 @@ u32 load( u32 addr, accessType type ) {
 			return 0;
 			
 		} else if( addr >= 0x1F801C00 && addr < 0x1F802000 ) {
-			//printf( "Info: spu control read\n" );
+			//INFO( "spu control read" );
 			return 0;
 			
 		} else if( addr == 0x1F801074 ) {
@@ -141,27 +142,27 @@ u32 load( u32 addr, accessType type ) {
 			return istatus;
 			
 		} else if( addr >= 0x1F801100 && addr < 0x1F80112C ) {
-			INFO( "timer register read" );
+			//INFO( "timer register read" );
 			return 0;
 			
 		} else if( addr >= 0x1F801080 && addr < 0x1F801100 ) {
-			return read( (u8*)&dmaRegs + ( addr - 0x1F801080 ), type );
+			return dmaRead( addr );
 			
 		} else if( addr >= 0x1F801800 && addr < 0x1F801810 ) {
-			//INFO( "CDROM read, addr: 0x%.8X", addr );
+			INFO( "CDROM read, addr: 0x%.8X", addr );
 			//return 0;
 			//return 0x08;
 			//return 0xFF;
 			return cdRead( addr );
 		
 		} else if( addr == 0x1F801810 ) {
-			INFO( "GPUREAD read" );
-			return 0;
+			//INFO( "GPUREAD read" );
+			return gpuRead();
 			
 		} else if( addr == 0x1F801814 ) {
-			//printf( "Info: GPUSTAT read\n" );
-			return 0x1C000000;
-			//return gpuStatus.raw;
+			//INFO( "GPUSTAT read 0x%X", gpuStatus.raw );
+			//return 0x1C000000;
+			return gpuStatus.raw;
 			
 		} else {
 			ERR( "Unkown IO read, 0x%.8X\n", addr );
@@ -197,8 +198,8 @@ void store( u32 addr, accessType type, u32 n ) {
 	
 	if( c0regs.sr.isc ) {
 		icache[a.cache_line].instructions[a.index] = n;
-		icache[a.cache_line].invalidated = TRUE; // emulate tag/inv/lock cache modes
-		                                         // L64360 datasheet, page 191
+		icache[a.cache_line].invalidated = TRUE; // TODO: emulate tag/inv/lock cache modes
+		                                         //       L64360 datasheet, page 191
 		return;
 	} else if( icache[a.cache_line].tag == a.tag ) {
 		icache[a.cache_line].invalidated = TRUE; // might need per word invalidation
@@ -239,8 +240,8 @@ void store( u32 addr, accessType type, u32 n ) {
 			return;
 			
 		} else if( addr == 0x1F801070 ) {
-			//INFO( "interrupt status write" );
-			istatus = n;
+			//INFO( "interrupt status write 0x%X", n );
+			istatus &= n;
 			return;
 			
 		} else if( addr >= 0x1F801100 && addr < 0x1F80112C ) {
@@ -248,12 +249,11 @@ void store( u32 addr, accessType type, u32 n ) {
 			return;
 			
 		} else if( addr >= 0x1F801080 && addr < 0x1F801100 ) {
-			write( (u8*)&dmaRegs + ( addr - 0x1F801080 ), type, n );
-			//INFO( "DMA control write 0x%.8X, 0x%.8X", addr, n );
+			dmaWrite( addr, n );
 			return;
 			
 		} else if( addr >= 0x1F801800 && addr < 0x1F801810 ) {
-			//INFO( "CDROM write, addr: 0x%.8X value: 0x%.8X", addr, n );
+			INFO( "CDROM write, addr: 0x%.8X value: 0x%.8X", addr, n );
 			cdWrite( addr, n );
 			return;
 			
@@ -263,6 +263,10 @@ void store( u32 addr, accessType type, u32 n ) {
 			
 		} else if( addr == 0x1F801814 ) {
 			gp1( n );
+			return;
+			
+		} else if( addr >= 0x1F801040 && addr < 0x1F801050 ) {
+			joyPadWrite( addr, n );
 			return;
 			
 		} else {
@@ -275,6 +279,9 @@ void store( u32 addr, accessType type, u32 n ) {
 		
 	} else if( addr >= exp2_start && addr < exp2_end ) {
 		INFO( "expansion 2 write" );
+		if( addr == 0x1F802041 ) {
+			INFO( "POST: 0x%X", n );
+		}
 		return;
 	
 	} else {

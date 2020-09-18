@@ -3,6 +3,23 @@
 
 #include "types.h"
 
+typedef struct {
+	int pixels, hz, clocks;
+} hmode_t;
+
+static hmode_t hmodes[] = {
+	{ 320, 50, 423 },
+	{ 640, 50, 851 },
+	{ 256, 50, 340 },
+	{ 512, 50, 681 },
+	{ 368, 50, 486 },
+	{ 320, 60, 426 },
+	{ 640, 60, 853 },
+	{ 256, 60, 341 },
+	{ 512, 60, 682 },
+	{ 368, 60, 487 }
+};
+
 typedef union {
 	u32 raw;
 	struct {
@@ -24,6 +41,7 @@ typedef union {
 		u32 outDepth:1;
 		u32 interlace:1;
 		u32 displayDisable:1;
+		u32 irq:1;
 		u32 DMARequest:1;
 		u32 cmdReady:1;
 		u32 vramReady:1;
@@ -64,10 +82,12 @@ typedef struct {
 typedef enum {
 	NOP = 0x00,
 	CLEAR_TEXCACHE = 0x01,
+	FILL_RECT = 0x02,
 	FLAT_QUAD = 0x28,
 	FLAT_TEXTURED_QUAD = 0x2C,
 	SHADED_TRI = 0x30,
 	SHADED_QUAD = 0x38,
+	DRAW_RECT = 0x64,
 	TRANSFER_TO_VRAM = 0xA0,
 	TRANSFER_FROM_VRAM = 0xC0,
 	DRAW_MODE = 0xE1,
@@ -91,8 +111,12 @@ typedef enum {
 } gp1Cmd_t;
 
 extern gpuStatus_t gpuStatus;
+extern gpuState_t gpuState;
 
 void gp0( u32 cmd );
 void gp1( u32 cmd );
+u32 gpuRead( void );
+
+void saveVram( void );
 
 #endif

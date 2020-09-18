@@ -6,8 +6,10 @@
 #include "bus.h"
 #include "instructions.h"
 #include "dma.h"
+#include "gte.h"
 #include "dis.h"
 #include "psx_exe.h"
+#include "hlebios.h"
 
 u32 regs[32];
 u32 hi, lo, pc;
@@ -29,12 +31,15 @@ u32 imask = 0;
 int logInstrs = FALSE;
 int logBranches = FALSE;
 
+extern int halt;
+int cpuBreak = FALSE;
+
 void except( u32 cause ) {
-	//INFO( "exception: 0x%X", cause );
+	INFO( "exception: 0x%X", cause );
 	
 	c0regs.sr.raw = ( c0regs.sr.raw & ~0x3F ) | ( ( c0regs.sr.raw << 2 ) & 0x3F );
 	c0regs.cause = cause << 2;
-	c0regs.epc = currentpc;
+	c0regs.epc = currentpc + 4;
 	if( c0regs.sr.bev ) {
 		pc = 0xBFC00180;
 	} else {
@@ -47,7 +52,7 @@ void except( u32 cause ) {
 	}
 }
 
-char dmsg[256] = { 0 };
+static char dmsg[256] = { 0 };
 
 void execute( u32 opcode ) {
 	u32 inregs[32] = { 0 };
@@ -58,8 +63,15 @@ void execute( u32 opcode ) {
 	
 	regs[0] = 0;
 	
+	
+	//if( currentpc == 0xA0 || currentpc == 0xB0 || currentpc == 0xC0 ) {
+		//bioscall( currentpc, inregs[9], inregs );
+	//}
+	
 	if( currentpc == 0xA0 ) {
-		INFO( "bios call: 0xA0%.2X", inregs[9] );
+		if( inregs[9] != 0x2A ) {
+			INFO( "bios call: 0xA0%.2X", inregs[9] );
+		}
 	}
 	if( currentpc == 0xB0 ) {
 		if( inregs[9] == 0x3D ) {
@@ -77,6 +89,13 @@ void execute( u32 opcode ) {
 	if( currentpc == 0xC0 ) {
 		INFO( "bios call: 0xC0%.2X", inregs[9] );
 	}
+	
+	// 0x80030000
+	//if( /*currentpc == 0xBFC01A60 || nextpc == 0xBFC01A60 ||*/ pc == 0xBFC01A60 ) {
+		//halt = TRUE;
+		//cpuBreak = TRUE;
+	//}
+	
 	
 	u32 op = GET_OP( opcode );
 	switch( op ) {
@@ -193,7 +212,7 @@ void execute( u32 opcode ) {
 				case SYSCALL:
 					//pc -= 4;
 					except( 0x08 );
-					//INFO( "syscall %d, r4: 0x%.8X", GET_SYS( opcode ), regs[4] );
+					INFO( "0x%X: syscall %d, r4: 0x%.8X", currentpc, GET_SYS( opcode ), regs[4] );
 					//GET_SYS( opcode );
 					break;
 					
@@ -497,7 +516,8 @@ void execute( u32 opcode ) {
 			break;
 			
 		case COP2:
-			ERR( "GTE op\n" );
+			//WARN( "GTE op 0x%X", opcode );
+			gteExec( opcode );
 			break;
 			
 		case COP3:
@@ -547,7 +567,12 @@ u32 opcode;
 u32 nextOpcode;
 
 void setupCPU( void ) {
-	bios = loadFile( "bios/SCPH1001.BIN" );
+	bios = loadFile( "bios/SCPH1000.BIN" );
+	//bios = loadFile( "bios/SCPH-3500.BIN" );
+	//bios = loadFile( "bios/SCPH5500.BIN" );
+	//bios = loadFile( "bios/SCPH-7502.BIN" );
+	//bios = loadFile( "bios/SCPH-100.BIN" );
+	//bios = loadFile( "bios/PSP660.BIN" );
 	
 	memset( regs, 0, sizeof( u32[32] ) );
 	hi = 0;
@@ -559,16 +584,17 @@ void setupCPU( void ) {
 	c0regs.sr.ts = TRUE;
 	c0regs.prid = 0x02;
 	
-	dmaRegs.ctrl = 0x07654321;
-	
 	opcode = 0x00;
 	nextOpcode = 0x00;
 	
-	//loadEXE( "tests/PSXTEST.EXE" );
+	dmaSetup();
+	
+	//loadEXE( "tests/psxlander/LANDNTSC.exe" );
 }
 
 void step( int clocks ) {
-	while( clocks > 0 ) {
+	cpuBreak = FALSE;
+	while( clocks > 0 && !cpuBreak ) {
 		if( exception ) {
 			opcode = load( pc, INSTRUCTION );
 			currentpc = pc;
@@ -591,7 +617,7 @@ void step( int clocks ) {
 		
 		execute( opcode );
 		
-		processDMA();
+		dmaUpdate();
 		
 		clocks--;
 	}

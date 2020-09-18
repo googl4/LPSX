@@ -5,7 +5,7 @@
 #include "gl.h"
 
 gpuStatus_t gpuStatus = { .raw = 0x1C000000 };
-gpuState_t state;
+gpuState_t gpuState;
 
 union {
 	u8 b[512][2048];
@@ -62,6 +62,34 @@ void gp0( u32 cmd ) {
 		if( cmdBufLen == cmdLen ) {
 			u32 op = cmdBuf[0] >> 24;
 			switch( op ) {
+				case FILL_RECT:
+					{
+						u32 r = cmdBuf[0] & 0xFF;
+						u32 g = ( cmdBuf[0] >> 8 ) & 0xFF;
+						u32 b = ( cmdBuf[0] >> 16 ) & 0xFF;
+						int x = ( cmdBuf[1] & 0xFFFF );
+						int y = ( cmdBuf[1] >> 16 );
+						int w = ( cmdBuf[2] & 0xFFFF );
+						int h = ( cmdBuf[2] >> 16 );
+						vertex verts[4];
+						verts[0].x = (float)x / 512.0f - 1.0f;
+						verts[0].y = 1.0f - (float)y / 256.0f;
+						verts[1].x = (float)( x + w ) / 512.0f - 1.0f;
+						verts[1].y = 1.0f - (float)y / 256.0f;
+						verts[2].x = (float)x / 512.0f - 1.0f;
+						verts[2].y = 1.0f - (float)( y + h ) / 256.0f;
+						verts[3].x = (float)( x + w ) / 512.0f - 1.0f;
+						verts[3].y = 1.0f - (float)( y + h ) / 256.0f;
+						for( int i = 0; i < 4; i++ ) {
+							verts[i].r = r;
+							verts[i].g = g;
+							verts[i].b = b;
+							verts[i].a = 255;
+						}
+						drawQuad( verts );
+					}
+					break;
+				
 				case FLAT_QUAD:
 					{
 						u32 r = cmdBuf[0] & 0xFF;
@@ -69,8 +97,8 @@ void gp0( u32 cmd ) {
 						u32 b = ( cmdBuf[0] >> 16 ) & 0xFF;
 						vertex verts[4];
 						for( int i = 0; i < 4; i++ ) {
-							int x = state.drawX + (s16)( cmdBuf[i+1] & 0xFFFF );
-							int y = state.drawY + (s16)( cmdBuf[i+1] >> 16 );
+							int x = gpuState.drawX + (s16)( cmdBuf[i+1] & 0xFFFF );
+							int y = gpuState.drawY + (s16)( cmdBuf[i+1] >> 16 );
 							verts[i].x = (float)x / 512.0f - 1.0f;
 							verts[i].y = 1.0f - (float)y / 256.0f;
 							verts[i].r = r;
@@ -94,8 +122,8 @@ void gp0( u32 cmd ) {
 						//texturedVertex verts[4];
 						vertex verts[4];
 						for( int i = 0; i < 4; i++ ) {
-							int x = state.drawX + (s16)( cmdBuf[i*2+1] & 0xFFFF );
-							int y = state.drawY + (s16)( cmdBuf[i*2+1] >> 16 );
+							int x = gpuState.drawX + (s16)( cmdBuf[i*2+1] & 0xFFFF );
+							int y = gpuState.drawY + (s16)( cmdBuf[i*2+1] >> 16 );
 							int u = tx + ( cmdBuf[i*2+2] & 0xFF );
 							int v = ty + ( ( cmdBuf[i*2+2] >> 8 ) & 0xFF );
 							verts[i].x = (float)x / 512.0f - 1.0f;
@@ -116,8 +144,8 @@ void gp0( u32 cmd ) {
 					{
 						vertex verts[3];
 						for( int i = 0; i < 3; i++ ) {
-							int x = state.drawX + (s16)( cmdBuf[i*2+1] & 0xFFFF );
-							int y = state.drawY + (s16)( cmdBuf[i*2+1] >> 16 );
+							int x = gpuState.drawX + (s16)( cmdBuf[i*2+1] & 0xFFFF );
+							int y = gpuState.drawY + (s16)( cmdBuf[i*2+1] >> 16 );
 							verts[i].x = (float)x / 512.0f - 1.0f;
 							verts[i].y = 1.0f - (float)y / 256.0f;
 							if( i == 0 ) {
@@ -139,8 +167,8 @@ void gp0( u32 cmd ) {
 					{
 						vertex verts[4];
 						for( int i = 0; i < 4; i++ ) {
-							int x = state.drawX + (s16)( cmdBuf[i*2+1] & 0xFFFF );
-							int y = state.drawY + (s16)( cmdBuf[i*2+1] >> 16 );
+							int x = gpuState.drawX + (s16)( cmdBuf[i*2+1] & 0xFFFF );
+							int y = gpuState.drawY + (s16)( cmdBuf[i*2+1] >> 16 );
 							verts[i].x = (float)x / 512.0f - 1.0f;
 							verts[i].y = 1.0f - (float)y / 256.0f;
 							if( i == 0 ) {
@@ -201,6 +229,7 @@ void gp0( u32 cmd ) {
 		case CLEAR_TEXCACHE:
 			break;
 			
+		LONG_CMD( 3, FILL_RECT );
 		LONG_CMD( 5, FLAT_QUAD );
 		LONG_CMD( 9, FLAT_TEXTURED_QUAD );
 		LONG_CMD( 6, SHADED_TRI );
@@ -211,32 +240,32 @@ void gp0( u32 cmd ) {
 		case DRAW_MODE:
 			gpuStatus.raw = ( gpuStatus.raw & 0xFFFFFC00 ) | ( cmd & 0x03FF );
 			gpuStatus.texDisable = GET_BIT( cmd, 11 );
-			state.texFlipX = GET_BIT( cmd, 12 );
-			state.texFlipY = GET_BIT( cmd, 13 );
+			gpuState.texFlipX = GET_BIT( cmd, 12 );
+			gpuState.texFlipY = GET_BIT( cmd, 13 );
 			break;
 			
 		case SET_TEX_WIN:
-			state.texWinXMask = cmd & 0x1F;
-			state.texWinYMask = ( cmd >> 5 ) & 0x1F;
-			state.texWinX = ( cmd >> 10 ) & 0x1F;
-			state.texWinY = ( cmd >> 15 ) & 0x1F;
+			gpuState.texWinXMask = cmd & 0x1F;
+			gpuState.texWinYMask = ( cmd >> 5 ) & 0x1F;
+			gpuState.texWinX = ( cmd >> 10 ) & 0x1F;
+			gpuState.texWinY = ( cmd >> 15 ) & 0x1F;
 			break;
 			
 		case SET_CLIP1:
-			state.clipX1 = cmd & 0x03FF;
-			state.clipY1 = ( cmd >> 10 ) & 0x03FF;
+			gpuState.clipX1 = cmd & 0x03FF;
+			gpuState.clipY1 = ( cmd >> 10 ) & 0x03FF;
 			break;
 			
 		case SET_CLIP2:
-			state.clipX2 = cmd & 0x03FF;
-			state.clipY2 = ( cmd >> 10 ) & 0x03FF;
+			gpuState.clipX2 = cmd & 0x03FF;
+			gpuState.clipY2 = ( cmd >> 10 ) & 0x03FF;
 			break;
 			
 		case SET_DRAW:;
 			u16 x = cmd & 0x07FF;
 			u16 y = ( cmd >> 11 ) & 0x07FF;
-			state.drawX = (s16)( x << 5 ) >> 5;
-			state.drawY = (s16)( y << 5 ) >> 5;
+			gpuState.drawX = (s16)( x << 5 ) >> 5;
+			gpuState.drawY = (s16)( y << 5 ) >> 5;
 			break;
 			
 		case SET_MASK:
@@ -257,17 +286,17 @@ void gp1( u32 cmd ) {
 	switch( op ) {
 		case RESET:
 			memset( &gpuStatus, 0, sizeof( gpuStatus_t ) );
-			memset( &state, 0, sizeof( gpuState_t ) );
+			memset( &gpuState, 0, sizeof( gpuState_t ) );
 			
 			// always ready for dma transfer
 			gpuStatus.raw = 0x1C000000;
 			
 			gpuStatus.displayDisable = TRUE;
 			gpuStatus.interlace = TRUE;
-			state.pixelStart = 0x0200;
-			state.pixelEnd = 0x0C00;
-			state.lineStart = 0x10;
-			state.lineEnd = 0x0100;
+			gpuState.pixelStart = 0x0200;
+			gpuState.pixelEnd = 0x0C00;
+			gpuState.lineStart = 0x10;
+			gpuState.lineEnd = 0x0100;
 			break;
 			
 		case RESET_CMD_BUFFER:
@@ -284,8 +313,8 @@ void gp1( u32 cmd ) {
 			break;
 			
 		case SET_DISPLAY:
-			state.displayX = cmd & 0x03FE;
-			state.displayY = ( cmd >> 10 ) & 0x01FF;
+			gpuState.displayX = cmd & 0x03FE;
+			gpuState.displayY = ( cmd >> 10 ) & 0x01FF;
 			break;
 			
 		case DISPLAY_MODE:
@@ -298,13 +327,13 @@ void gp1( u32 cmd ) {
 			break;
 			
 		case HRANGE:
-			state.pixelStart = cmd & 0x0FFF;
-			state.pixelEnd = ( cmd >> 12 ) & 0x0FFF;
+			gpuState.pixelStart = cmd & 0x0FFF;
+			gpuState.pixelEnd = ( cmd >> 12 ) & 0x0FFF;
 			break;
 			
 		case VRANGE:
-			state.lineStart = cmd & 0x03FF;
-			state.lineEnd = ( cmd >> 10 ) & 0x03FF;
+			gpuState.lineStart = cmd & 0x03FF;
+			gpuState.lineEnd = ( cmd >> 10 ) & 0x03FF;
 			break;
 			
 		default:

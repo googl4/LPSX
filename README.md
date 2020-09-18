@@ -4,13 +4,18 @@ WIP ps1 emulator
 
 
 ## build
-currently only works with msys2
+currently only tested with msys2
 1. build glfw as static library
 2. run build.sh
 3. put SCPH1001.BIN in bios/
 
 
-## todo
-- fix bios cd irq ack loop
+## tasks
+- dma rewrite
 - stack/memory viewer
 - breakpoints
+### future goals
+- proper build system, probably cmake
+- vulkan rendering
+- jit recompiler
+- hle bios

@@ -64,7 +64,13 @@ const char* texFragmentShaderSrc =
 	"out vec4 frag;\n"
 	"uniform usampler2D tex;\n"
 	"void main() {\n"
-	"    frag = vec4( texture( tex, texPos ).rrr / 255.0f, 1.0f ) * colour;\n"
+	"    uint packedRGB = texture( tex, texPos ).r;\n"
+	"    uint ir = packedRGB & 0x1F;\n"
+	"    uint ig = ( packedRGB >> 5 ) & 0x1F;\n"
+	"    uint ib = ( packedRGB >> 10 ) & 0x1F;\n"
+	"    frag = vec4( float( ir ) / 31.0f, float( ig ) / 31.0f, float( ib ) / 31.0f, 1.0f );\n"
+	"    frag *= colour;\n"
+//	"    frag = vec4( texture( tex, texPos ).rrr / 255.0f, 1.0f ) * colour;\n"
 	"}\n";
 
 void logShader( GLuint shader ) {
@@ -133,7 +139,7 @@ void setupGL( void ) {
 	glfwInit();
 	
 	glfwWindowHint( GLFW_CONTEXT_VERSION_MAJOR, 4 );
-	glfwWindowHint( GLFW_CONTEXT_VERSION_MINOR, 6 );
+	glfwWindowHint( GLFW_CONTEXT_VERSION_MINOR, 3 );
 	glfwWindowHint( GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE );
 	window = glfwCreateWindow( 1024, 512, "LPSX", NULL, NULL );
 	glfwMakeContextCurrent( window );
@@ -155,12 +161,15 @@ void setupGL( void ) {
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
-	glTexImage2D( GL_TEXTURE_2D, 0, GL_R8UI, 2048, 512, 0, GL_RED, GL_UNSIGNED_BYTE, NULL );
+	glTexImage2D( GL_TEXTURE_2D, 0, GL_R16UI, 1024, 512, 0, GL_RED_INTEGER, GL_UNSIGNED_SHORT, NULL );
 }
 
 void vramUpload( void* data, int x, int y, int w, int h ) {
 	glBindTexture( GL_TEXTURE_2D, vramTex );
-	glTexSubImage2D( GL_TEXTURE_2D, 0, x, y, w, h, GL_RED, GL_UNSIGNED_BYTE, data );
+	//printf( "gl: %d\n", glGetError() );
+	glTexSubImage2D( GL_TEXTURE_2D, 0, x, y, w, h, GL_RED_INTEGER, GL_UNSIGNED_SHORT, data );
+	//glTexImage2D( GL_TEXTURE_2D, 0, GL_R16UI, 1024, 512, 0, GL_RED, GL_UNSIGNED_SHORT, data );
+	//printf( "gl: %d\n", glGetError() );
 }
 
 void drawVerts( vertex* verts, int count ) {
@@ -194,10 +203,20 @@ void drawTexQuad( texturedVertex* verts ) {
 	glBindBuffer( GL_ARRAY_BUFFER, vbo );
 	glBufferData( GL_ARRAY_BUFFER, sizeof( texturedVertex ) * 4, verts, GL_STATIC_DRAW );
 	glBindVertexArray( texVAO );
-	glDrawArrays( GL_TRIANGLES, 0, 4 );
+	glDrawArrays( GL_TRIANGLE_STRIP, 0, 4 );
 }
 
 void update( void ) {
+	extern u16 vram[512][1024];
+	vramUpload( vram, 0, 0, 1024, 512 );
+	texturedVertex verts[4] = {
+		{ -1,  1,  0, 0,  255, 255, 255, 255 },
+		{  1,  1,  1, 0,  255, 255, 255, 255 },
+		{ -1, -1,  0, 1,  255, 255, 255, 255 },
+		{  1, -1,  1, 1,  255, 255, 255, 255 }
+	};
+	drawTexQuad( verts );
+	
 	updateUI();
 	
 	glfwSwapBuffers( window );
